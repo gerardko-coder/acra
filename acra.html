@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACRA Entity Search (data.gov.sg)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        h1 {
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+
+        p.subtitle {
+            color: #64748b;
+            margin-bottom: 24px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 16px;
+            font-size: 16px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: #2563eb;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        button:disabled {
+            background-color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-bottom: 16px;
+            font-weight: 500;
+            color: #475569;
+        }
+
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            color: #0f172a;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 12px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-item span.label {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .info-item span.value {
+            font-size: 14px;
+            color: #1e293b;
+            word-break: break-word;
+        }
+
+        .error {
+            color: #dc2626;
+            background: #fef2f2;
+            padding: 12px 16px;
+            border-radius: 6px;
+            border: 1px solid #fecaca;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>ACRA Corporate Entity Search</h1>
+    <p class="subtitle">Dataset ID: <code>d_8575e84912df3c28995b8e6e0e05205a</code> (Entities starting with 'A')</p>
+
+    <div class="search-box">
+        <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="Enter UEN (e.g. T08GS0001A) or entity name (e.g. APPLE)..." 
+            onkeydown="if(event.key === 'Enter') performSearch()"
+        />
+        <button id="searchBtn" onclick="performSearch()">Search</button>
+    </div>
+
+    <div id="statusMessage" class="status"></div>
+    <div id="results" class="results-container"></div>
+
+    <script>
+        const RESOURCE_ID = "d_8575e84912df3c28995b8e6e0e05205a";
+        const API_URL = "https://data.gov.sg/api/action/datastore_search";
+
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            const statusEl = document.getElementById('statusMessage');
+            const resultsEl = document.getElementById('results');
+            const buttonEl = document.getElementById('searchBtn');
+
+            if (!query) {
+                statusEl.innerHTML = '<span class="error">Please enter a UEN or Entity Name to search.</span>';
+                resultsEl.innerHTML = '';
+                return;
+            }
+
+            // Disable UI during search
+            buttonEl.disabled = true;
+            statusEl.textContent = 'Querying dataset...';
+            resultsEl.innerHTML = '';
+
+            try {
+                // Pass full search term into the 'q' parameter
+                const url = `${API_URL}?resource_id=${RESOURCE_ID}&q=${encodeURIComponent(query)}&limit=50`;
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success && data.result && data.result.records) {
+                    const records = data.result.records;
+
+                    if (records.length === 0) {
+                        statusEl.textContent = `No records found matching "${query}".`;
+                    } else {
+                        statusEl.textContent = `Found ${records.length} matching result(s):`;
+                        renderResults(records);
+                    }
+                } else {
+                    throw new Error("Invalid response format from server.");
+                }
+
+            } catch (err) {
+                statusEl.innerHTML = `<span class="error">Failed to fetch data: ${err.message}</span>`;
+            } finally {
+                buttonEl.disabled = false;
+            }
+        }
+
+        function renderResults(records) {
+            const resultsEl = document.getElementById('results');
+
+            records.forEach(record => {
+                const card = document.createElement('div');
+                card.className = 'card';
+
+                // Extract all keys dynamically so it renders whatever fields the API returns
+                let gridItemsHtml = '';
+                for (const [key, value] of Object.entries(record)) {
+                    if (key === '_id') continue; // Skip internal CKAN ID field
+
+                    // Format key name nicely (e.g., entity_name -> Entity Name)
+                    const formattedKey = key
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, l => l.toUpperCase());
+
+                    gridItemsHtml += `
+                        <div class="info-item">
+                            <span class="label">${formattedKey}</span>
+                            <span class="value">${value !== null && value !== undefined ? value : 'N/A'}</span>
+                        </div>
+                    `;
+                }
+
+                // Determine main heading name (fallback to entity name or UEN if available)
+                const entityTitle = record.entity_name || record.uen || `Record ID: ${record._id}`;
+
+                card.innerHTML = `
+                    <h3>${entityTitle}</h3>
+                    <div class="info-grid">
+                        ${gridItemsHtml}
+                    </div>
+                `;
+
+                resultsEl.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>
