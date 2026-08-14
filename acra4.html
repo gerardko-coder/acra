@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACRA Registry Search (data.gov.sg)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 0 16px;
+        }
+
+        h1 {
+            color: #1e293b;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+
+        p.subtitle {
+            color: #64748b;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .search-box {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: #fff;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 16px; /* Prevents auto-zoom on mobile safari */
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: #2563eb;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #1d4ed8;
+        }
+
+        button:disabled {
+            background-color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-bottom: 16px;
+            font-weight: 500;
+            color: #475569;
+            font-size: 14px;
+        }
+
+        .results-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 16px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            transition: background-color 0.15s ease;
+        }
+
+        .card-header:hover {
+            background-color: #f8fafc;
+        }
+
+        .card-title-group {
+            flex: 1;
+        }
+
+        .company-name {
+            font-size: 17px;
+            font-weight: 700;
+            color: #2563eb;
+            margin: 0 0 6px 0;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        .company-summary {
+            font-size: 14px;
+            color: #475569;
+            line-height: 1.5;
+        }
+
+        .toggle-icon {
+            font-size: 12px;
+            font-weight: bold;
+            color: #64748b;
+            background: #e2e8f0;
+            padding: 6px 10px;
+            border-radius: 4px;
+            white-space: nowrap;
+            margin-top: 2px;
+        }
+
+        .card-details {
+            display: none;
+            padding: 16px;
+            background-color: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .card.open .card-details {
+            display: block;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-item span.label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #64748b;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .info-item span.value {
+            font-size: 13px;
+            color: #1e293b;
+            word-break: break-word;
+        }
+
+        .error {
+            color: #dc2626;
+            background: #fef2f2;
+            padding: 12px 16px;
+            border-radius: 6px;
+            border: 1px solid #fecaca;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>ACRA Corporate Entity Search</h1>
+    <p class="subtitle">Querying Dataset: Entities Registered with ACRA (<code>d_3f960c10fed6145404ca7b821f263b87</code>)</p>
+
+    <div class="search-box">
+        <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="Enter UEN (e.g. 201201936C) or company name..." 
+            onkeydown="if(event.key === 'Enter') performSearch()"
+        />
+        <button id="searchBtn" onclick="performSearch()">Search</button>
+    </div>
+
+    <div id="statusMessage" class="status"></div>
+    <div id="results" class="results-container"></div>
+
+    <script>
+        const MASTER_RESOURCE_ID = "d_3f960c10fed6145404ca7b821f263b87";
+        const API_URL = "https://data.gov.sg/api/action/datastore_search";
+
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            const statusEl = document.getElementById('statusMessage');
+            const resultsEl = document.getElementById('results');
+            const buttonEl = document.getElementById('searchBtn');
+
+            if (!query) {
+                statusEl.innerHTML = '<span class="error">Please enter a UEN or Entity Name to search.</span>';
+                resultsEl.innerHTML = '';
+                return;
+            }
+
+            buttonEl.disabled = true;
+            statusEl.textContent = 'Querying ACRA Master Dataset...';
+            resultsEl.innerHTML = '';
+
+            try {
+                const url = `${API_URL}?resource_id=${MASTER_RESOURCE_ID}&q=${encodeURIComponent(query)}&limit=50`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success && data.result && data.result.records) {
+                    const records = data.result.records;
+
+                    if (records.length === 0) {
+                        statusEl.textContent = `No records found matching "${query}".`;
+                    } else {
+                        statusEl.textContent = `Found ${records.length} matching result(s) (click company name to expand details):`;
+                        renderResults(records);
+                    }
+                } else {
+                    throw new Error("Invalid response structure received from API.");
+                }
+
+            } catch (err) {
+                statusEl.innerHTML = `<span class="error">Failed to fetch data: ${err.message}</span>`;
+            } finally {
+                buttonEl.disabled = false;
+            }
+        }
+
+        function formatAddress(record) {
+            if (record.address) return record.address;
+
+            const block = record.block || record.house_number || record.reg_block || '';
+            const street = record.street_name || record.reg_street_name || '';
+            const level = record.level_number || record.floor_number ? `#${record.level_number || record.floor_number}` : '';
+            const unit = record.unit_number ? `-${record.unit_number}` : '';
+            const building = record.building_name || '';
+            const postalCode = record.postal_code || record.reg_postal_code || '';
+            const postal = postalCode ? `Singapore ${postalCode}` : '';
+
+            const unitStr = (level || unit) ? `${level}${unit}` : '';
+            const parts = [block, street, building, unitStr, postal].filter(Boolean);
+
+            return parts.length > 0 ? parts.join(', ') : 'Address Not Specified';
+        }
+
+        function isExcludedFormerEntityName(key) {
+            const normalized = key.toLowerCase().replace(/_/g, '').replace(/ /g, '');
+            // Keeps formerentityname1, filters out formerentityname2, formerentityname3, etc.
+            return normalized.startsWith('formerentityname') && !normalized.endsWith('1');
+        }
+
+        function renderResults(records) {
+            const resultsEl = document.getElementById('results');
+
+            records.forEach(record => {
+                const card = document.createElement('div');
+                card.className = 'card';
+
+                const name = record.entity_name || record.Entity_Name || 'N/A';
+                const uen = record.uen || record.Uen || record.uen_number || 'N/A';
+                const address = formatAddress(record);
+
+                let detailsGridHtml = '';
+                for (const [key, value] of Object.entries(record)) {
+                    if (key === '_id') continue;
+                    if (isExcludedFormerEntityName(key)) continue;
+
+                    const formattedKey = key
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, l => l.toUpperCase());
+
+                    detailsGridHtml += `
+                        <div class="info-item">
+                            <span class="label">${formattedKey}</span>
+                            <span class="value">${value !== null && value !== undefined && value !== '' ? value : 'N/A'}</span>
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <div class="card-header" onclick="toggleDetails(this)">
+                        <div class="card-title-group">
+                            <div class="company-name">${name}</div>
+                            <div class="company-summary">
+                                <strong>UEN:</strong> ${uen}<br>
+                                <strong>Address:</strong> ${address}
+                            </div>
+                        </div>
+                        <div class="toggle-icon">+ Details</div>
+                    </div>
+                    <div class="card-details">
+                        <div class="info-grid">
+                            ${detailsGridHtml}
+                        </div>
+                    </div>
+                `;
+
+                resultsEl.appendChild(card);
+            });
+        }
+
+        function toggleDetails(headerEl) {
+            const card = headerEl.parentElement;
+            const toggleIcon = headerEl.querySelector('.toggle-icon');
+            
+            card.classList.toggle('open');
+            if (card.classList.contains('open')) {
+                toggleIcon.textContent = '– Hide Details';
+            } else {
+                toggleIcon.textContent = '+ Details';
+            }
+        }
+    </script>
+</body>
+</html>
